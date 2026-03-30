@@ -1,132 +1,62 @@
-from flask import Flask, render_template
-from flask_socketio import SocketIO
-import time
 import threading
-import random
-from datetime import datetime
+import os
+from dotenv import load_dotenv
+from flask import Flask, render_template
+from urllib.parse import quote_plus
+from flask_sqlalchemy import SQLAlchemy
+from capture_packet import start_sniffer
 
+load_dotenv()
+DB_PASSWORD = quote_plus(os.getenv("DB_PASSWORD"))
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, async_mode='threading')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://root:{DB_PASSWORD}@localhost/network_monitor'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-# ── Sample Data ──────────────────────────────────────────────────────────────
+#Table 1: Packet Logs
+class PacketLog(db.Model):
+    __tablename__ = 'packet_logs'
 
-USERS = ['Alice', 'Bob', 'Jashan', 'User 2', 'User 4', 'Morgan', 'Chen', 'Priya']
-ACCESS_POINTS = [f'AP {i}' for i in [7, 20, 43, 48, 12, 31, 55, 6, 19]]
-DIRECTIONS = ['ENTRY', 'ENTRY', 'ENTRY', 'EXIT']   # weighted toward ENTRY
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime)
+    src_ip = db.Column(db.String(45))
+    dst_ip = db.Column(db.String(45))
+    protocol = db.Column(db.String(10))
+    src_port = db.Column(db.Integer)
+    dst_port = db.Column(db.Integer)
+    packet_size = db.Column(db.Integer)
+    
+    def __repr__(self):
+        return f"{id}: {self.protocol}"
 
-ALERT_DESCRIPTIONS = [
-    "Impossible Journey detected from {loc1} to {loc2}. Distance: {dist}m, Velocity: {vel} m/s",
-    "Multiple failed badge attempts at {loc1} by {user}",
-    "After-hours access attempt at {loc1} — outside permitted schedule",
-    "Tailgating detected at {loc1}: two people, one credential",
-    "Credential reuse detected: same badge at {loc1} and {loc2} simultaneously",
-    "Rapid successive entries at {loc1} — possible relay attack",
-]
+#Table 2: Incidents
+class Incident(db.Model):
+    __tablename__ = 'incidents'
 
-LOCATIONS = [
-    'Dalton PLC – Floor 1',
-    'Beck and Sons – Floor 4',
-    'Main Lobby',
-    'Server Room B',
-    'Executive Suite',
-    'Parking – Level 2',
-]
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime)
+    src_ip = db.Column(db.String(45))
+    dst_ip = db.Column(db.String(45))
+    anomaly_type = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    pcap_file = db.Column(db.String(255))
+    hash_value = db.Column(db.String(255))
 
-RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
-RISK_WEIGHTS = [40, 30, 20, 10]   # probability weights
-
-LOG_MESSAGES = [
-    "System heartbeat OK",
-    "Badge reader {ap} online",
-    "Door sensor {ap} — state nominal",
-    "Access granted: {user} → {ap}",
-    "Access denied: unknown credential at {ap}",
-    "Camera feed {ap} connected",
-    "Intrusion sensor {ap} — no motion",
-    "Network link to {ap} stable",
-    "Auth token refreshed for {user}",
-    "Audit flush — {n} records written to DB",
-]
-
-
-def now_ts():
-    return datetime.now().strftime('%H:%M:%S')
-
-
-# ── Background Thread — emit mixed events ────────────────────────────────────
-
-def emit_events():
-    """Continuously emit three types of events to the dashboard."""
-    count = 0
-
-    while True:
-        count += 1
-        roll = random.random()
-
-        # ── 1. Generic log stream (always) ──────────────────────────────────
-        user = random.choice(USERS)
-        ap   = random.choice(ACCESS_POINTS)
-        msg_template = random.choice(LOG_MESSAGES)
-        message = (msg_template
-                   .replace('{user}', user)
-                   .replace('{ap}',   ap)
-                   .replace('{n}',    str(random.randint(50, 500))))
-
-        socketio.emit('new_log', {
-            'type':    'stream',
-            'message': f'[{now_ts()}] #{count:04d}  {message}',
-        })
-
-        # ── 2. Access log (70 % of ticks) ───────────────────────────────────
-        if roll < 0.70:
-            direction = random.choice(DIRECTIONS)
-            socketio.emit('new_log', {
-                'type':         'access',
-                'user':         user,
-                'access_point': ap,
-                'direction':    direction,
-            })
-
-        # ── 3. Security alert (15 % of ticks) ────────────────────────────────
-        if roll > 0.85:
-            loc1  = random.choice(LOCATIONS)
-            loc2  = random.choice([l for l in LOCATIONS if l != loc1])
-            dist  = round(random.uniform(100_000, 9_000_000), 2)
-            vel   = round(random.uniform(5_000, 400_000), 2)
-            risk  = random.choices(RISK_LEVELS, weights=RISK_WEIGHTS, k=1)[0]
-
-            desc_template = random.choice(ALERT_DESCRIPTIONS)
-            description = (desc_template
-                           .replace('{loc1}', loc1)
-                           .replace('{loc2}', loc2)
-                           .replace('{dist}', f'{dist:,.2f}')
-                           .replace('{vel}',  f'{vel:,.2f}')
-                           .replace('{user}', user))
-
-            socketio.emit('new_log', {
-                'type':        'alert',
-                'user':        user,
-                'risk_level':  risk,
-                'velocity':    f'{vel:,.2f} m/s',
-                'description': description,
-            })
-
-        # Emit every 2 seconds
-        time.sleep(2)
+    def __repr__(self):
+        return f"{id}: {self.anomaly_type}"
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
-
 @app.route('/')
 def index():
-    return render_template('dashboard.html')
+    logs = PacketLog.query.order_by(PacketLog.timestamp.desc()).all()
+    return render_template('dashboard.html', logs=logs)
 
-
-# ── Start background thread ───────────────────────────────────────────────────
-
-threading.Thread(target=emit_events, daemon=True).start()
+# ── Routes ───────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     print("Starting SecureWatch dashboard at http://127.0.0.1:5000")
-    socketio.run(app, debug=True)
+    # ── Start background thread ───────────────────────────────────────────────
+    # thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog), daemon=True).start()
+    app.run(debug=True)
