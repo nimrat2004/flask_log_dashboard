@@ -33,7 +33,7 @@
     </div> -->
     <div class="stat-card red">
       <div class="stat-label">Security Alerts</div>
-      <div class="stat-value" id="stat-alerts">0</div>
+      <div class="stat-value" id="stat-alerts">{{ alerts|length }}</div>
       <div class="stat-sub">Anomalies detected</div>
     </div>
     <!-- <div class="stat-card yellow">
@@ -92,18 +92,32 @@
         <table class="log-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>User</th>
-              <th>Risk</th>
-              <th>Velocity</th>
+              <th>Timestamp</th>
+              <th>Source IP</th>
+              <th>Dest. IP</th>
+              <th>Anomaly Type</th>
               <th>Description</th>
             </tr>
           </thead>
           <tbody id="alerts-tbody">
+            {% if alerts %}
+            {% for alert in alerts %}
+              <tr>
+              <th>{{alert.timestamp}}</th>
+              <th>{{alert.src_ip}}</th>
+              <th>{{alert.dst_ip}}</th>
+              <th>{{alert.anomaly_type}}</th>
+              <th>{{alert.description}}</th>
+            </tr>
+            {% endfor %}
+              
+            {% else %}
+        
             <tr><td colspan="5"><div class="empty">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               No alerts detected…
             </div></td></tr>
+            {% endif %}
           </tbody>
         </table>
       </div>
@@ -124,13 +138,15 @@
         <table class="log-table">
           <thead>
             <tr>
-            <th>S.No</th>
+      
         <th>Time</th>
         <th>Source</th>
         <th>Destination</th>
+        <th>HostName</th>
         <th>Protocol</th>
         <th>Ports(SRC->DST)</th>
         <th>Size(Bytes)</th>
+      
     </tr>
           </thead>
           <tbody id="alerts-tbody">
@@ -141,23 +157,45 @@
             </div></td></tr>
             {% else %}
              {% for log in logs %}
+              
+             {% if log.hostname == "Unknown" %}
+              
+             {% else %}
               <tr>
-                <td>{{loop.index}}</td>
+             
         <td>{{ log.timestamp }}</td>
         <td>{{ log.src_ip }}</td>
         <td>{{ log.dst_ip }}</td>
+        <td>{{ log.hostname }}</td>
         <td>{{ log.protocol }}</td>
         <td>{{ log.src_port }} → {{ log.dst_port }}</td>
         <td>{{ log.packet_size }}</td>
+        <!-- {% if 
+        (log.protocol == "TCP" and (log.dst_port in [80, 443] or log.src_port in [80, 443])) 
+        or 
+        (log.protocol == "UDP" and (log.dst_port == 53 or log.src_port == 53))
+    %}
+          <td>Yes</td>
+          
+        {% else %}
+            <td>No</td>
+       
+    {% endif %} -->
     </tr>
+     {% endif %}
     {% endfor %}
             {% endif %}
 
           </tbody>
+
+
+          
+       
         </table>
       </div>
     </div>
   </div>
+
 
 </main>
 <script src="{{ url_for('static', filename='main.js') }}"></script>

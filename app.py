@@ -5,6 +5,8 @@ from flask import Flask, render_template
 from urllib.parse import quote_plus
 from flask_sqlalchemy import SQLAlchemy
 from capture_packet import start_sniffer
+from flask import jsonify
+from utils import get_hostname
 
 load_dotenv()
 DB_PASSWORD = quote_plus(os.getenv("DB_PASSWORD"))
@@ -51,12 +53,36 @@ class Incident(db.Model):
 @app.route('/')
 def index():
     logs = PacketLog.query.order_by(PacketLog.timestamp.desc()).all()
-    return render_template('dashboard.html', logs=logs)
+    alerts = Incident.query.order_by(Incident.timestamp.desc()).all()
+
+    hostnames = []
+    for log in logs:
+        log.hostname = get_hostname(log.dst_ip)
+    return render_template('dashboard.html', logs=logs, alerts = alerts)
+
+
+@app.route("/api/logs")
+def get_logs():
+    logs = PacketLog.query.order_by(PacketLog.timestamp.desc()).limit(50).all()
+
+    data = []
+    for log in logs:
+        data.append({
+            "timestamp": str(log.timestamp),
+            "id": log.id,
+            "src_ip": log.src_ip,
+            "dst_ip": log.dst_ip,
+            "protocol": log.protocol,
+            "src_port": log.src_port,
+            "dst_port": log.dst_port,
+            "size": log.packet_size
+        })
+    return jsonify(data)
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     print("Starting SecureWatch dashboard at http://127.0.0.1:5000")
     # ── Start background thread ───────────────────────────────────────────────
-    # thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog), daemon=True).start()
+    thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog, Incident), daemon=True).start()
     app.run(debug=True)
