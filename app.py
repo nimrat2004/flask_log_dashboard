@@ -5,8 +5,10 @@ from flask import Flask, render_template
 from urllib.parse import quote_plus
 from flask_sqlalchemy import SQLAlchemy
 from capture_packet import start_sniffer
-from flask import jsonify
-from utils import get_hostname
+from flask import jsonify, request
+from utils import get_hostname, my_current_ip, generate_hash
+from scapy.all import conf
+from datetime import datetime
 
 load_dotenv()
 DB_PASSWORD = quote_plus(os.getenv("DB_PASSWORD"))
@@ -48,41 +50,106 @@ class Incident(db.Model):
     def __repr__(self):
         return f"{id}: {self.anomaly_type}"
 
+# def save_incident(timestamp,src_ip,dst_ip, anomaly_type,description):
+# # prepare data for hashing
+#     incident_data = {
+#         "timestamp": str(timestamp),
+#         "src_ip": src_ip,
+#          "dst_ip": dst_ip,
+#         "anomaly_type": anomaly_type,
+#         "description": description
+#     }
+
+#     # generate hash
+#     hash_value = generate_hash(incident_data)
+
+#     incident = Incident(
+#         timestamp=datetime.now(),
+#         src_ip=src_ip,
+#         dst_ip=dst_ip,
+#         anomaly_type= anomaly_type,
+#         description= description,
+#         hash_value=hash_value,
+#     )
+
+#     db.session.add(incident)
+#     db.session.commit()
+
+
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
-    logs = PacketLog.query.order_by(PacketLog.timestamp.desc()).all()
-    alerts = Incident.query.order_by(Incident.timestamp.desc()).all()
+    logs = PacketLog.query.order_by(PacketLog.id.desc()).limit(200).all()
+    alerts = Incident.query.order_by(Incident.id.desc()).limit(200).all()
 
-    hostnames = []
     for log in logs:
-        log.hostname = get_hostname(log.dst_ip)
-    return render_template('dashboard.html', logs=logs, alerts = alerts)
+        target_ip = log.src_ip if my_current_ip == log.dst_ip else log.dst_ip
+        log.hostname = get_hostname(target_ip)
+        
+    return render_template('dashboard.html', logs=logs, alerts=alerts)
 
 
 @app.route("/api/logs")
 def get_logs():
-    logs = PacketLog.query.order_by(PacketLog.timestamp.desc()).limit(50).all()
+    # Get the last seen ID from the frontend request (default to 0)
+    last_id = request.args.get('last_id', default=0, type=int)
+
+    # 1. Fetch only new logs
+    new_logs = PacketLog.query.filter(PacketLog.id > last_id).order_by(PacketLog.id.asc()).limit(100).all()
+    
+    # 2. Get the count of THIS specific batch
+    total_logs = len(new_logs)
+  
+    last_id = request.args.get('last_id', default=0, type=int)
 
     data = []
-    for log in logs:
+    for log in new_logs:
+        target_ip = log.src_ip if my_current_ip == log.dst_ip else log.dst_ip
         data.append({
-            "timestamp": str(log.timestamp),
             "id": log.id,
+            "timestamp": log.timestamp.strftime("%H:%M:%S"),
             "src_ip": log.src_ip,
             "dst_ip": log.dst_ip,
+            "hostname": get_hostname(target_ip),
             "protocol": log.protocol,
-            "src_port": log.src_port,
-            "dst_port": log.dst_port,
+            "ports": f"{log.src_port} → {log.dst_port}",
             "size": log.packet_size
         })
-    return jsonify(data)
+    
+    # Return as a dictionary
+    return jsonify({
+        "logs": data,
+        "total_logs": total_logs,
+       
+    })
 
+# Add a similar one for Incidents
+@app.route("/api/incidents")
+def get_incidents():
+    last_id = request.args.get('last_id', default=0, type=int)
+    incidents = Incident.query.filter(Incident.id > last_id).order_by(Incident.id.asc()).all()
+    
+    data = []
+    for inc in incidents:
+        data.append({
+            "id": inc.id,
+            "timestamp": inc.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "src_ip": inc.src_ip,
+            "dst_ip": inc.dst_ip,
+            "type": inc.anomaly_type,
+            "desc": inc.description
+        })
+    total_alerts = len(incidents)
+
+    return jsonify({
+        "data": data,
+        "total_alerts": total_alerts
+    })
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     print("Starting SecureWatch dashboard at http://127.0.0.1:5000")
     # ── Start background thread ───────────────────────────────────────────────
-    thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog, Incident), daemon=True).start()
+    #thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog, Incident), daemon=True).start()
     app.run(debug=True)

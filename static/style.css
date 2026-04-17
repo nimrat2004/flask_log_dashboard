@@ -365,3 +365,25 @@ body {
       .section-grid { grid-template-columns: 1fr; }
       main { padding: 20px 16px; }
     }
+
+/* Animation for new packet logs */
+@keyframes highlightFade {
+    0% { background-color: rgba(0, 94, 255, 0.311); } /* Soft Blue */
+    100% { background-color: transparent; }
+}
+
+/* Animation for new security alerts */
+@keyframes alertFlash {
+    0% { background-color: rgba(255, 71, 87, 0.3); transform: translateX(-5px); } /* Soft Red + Shake */
+    50% { transform: translateX(5px); }
+    100% { background-color: transparent; transform: translateX(0); }
+}
+
+.new-row {
+    animation: highlightFade 2s ease-out;
+}
+
+.new-alert {
+    animation: alertFlash 0.8s ease-in-out;
+    border-left: 3px solid var(--danger);
+}
