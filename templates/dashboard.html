@@ -12,6 +12,7 @@
 
 <!-- HEADER -->
 <header>
+  <p>Network Monitoring Tool Dashboard</p>
   <div class="header-right" style="margin-left:auto;">
     <div class="live-badge"><div class="live-dot"></div> Live</div>
     <div class="clock" id="clock">--:--:--</div>
@@ -23,57 +24,20 @@
   <div class="stats-row">
     <div class="stat-card green">
       <div class="stat-label">Total Logs</div>
-      <div class="stat-value" id="stat-total">{{logs|length}}</div>
+      <div class="stat-value" id="stat-total">{{ total_logs_count }}</div>
       <div class="stat-sub">Since session start</div>
     </div>
-    <!-- <div class="stat-card blue">
-      <div class="stat-label">Access Events</div>
-      <div class="stat-value" id="stat-access">0</div>
-      <div class="stat-sub">Entries &amp; exits</div>
-    </div> -->
+
     <div class="stat-card red">
       <div class="stat-label">Security Alerts</div>
-      <div class="stat-value" id="stat-alerts"></div>
+      <div class="stat-value" id="stat-alerts">{{ total_alerts_count }}</div>
       <div class="stat-sub">Anomalies detected</div>
     </div>
-    <!-- <div class="stat-card yellow">
-      <div class="stat-label">Active Users</div>
-      <div class="stat-value" id="stat-users">0</div>
-      <div class="stat-sub">Unique this session</div>
-    </div> -->
+  
   </div>
 
   <!-- ACCESS + ALERTS -->
   <div class="section-grid">
-
-    <!-- Recent Access Logs
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><span class="dot"></span> Recent Access Logs</div>
-        <div class="panel-actions">
-          <button class="btn-sm" onclick="clearAccess()">Clear</button>
-          <button class="btn-sm" onclick="refreshAccess()">Refresh</button>
-        </div>
-      </div>
-      <div class="table-scroll">
-        <table class="log-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>User</th>
-              <th>Access Point</th>
-              <th>Direction</th>
-            </tr>
-          </thead>
-          <tbody id="access-tbody">
-            <tr><td colspan="4"><div class="empty">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              Waiting for access events…
-            </div></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div> -->
 
     <!-- Security Alerts -->
     <div class="panel">
@@ -83,10 +47,7 @@
           Security Alerts
           <span style="font-size:.68rem;color:var(--muted);font-weight:400;margin-left:4px;">(Real-time)</span>
         </div>
-        <!-- <div class="panel-actions">
-          <button class="btn-sm" onclick="clearAlerts()">Clear</button>
-          <button class="btn-sm" onclick="refreshAlerts()">Refresh</button>
-        </div> -->
+
       </div>
       <div class="table-scroll">
         <table class="log-table">

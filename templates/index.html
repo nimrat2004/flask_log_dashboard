@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SecureWatch — Live Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Split layout ── */
+.split-wrapper {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  height: 420px;
+}
+.split-pane { display: flex; flex-direction: column; overflow: hidden; min-width: 160px; }
+.pane-left  { flex: 0 0 38%; }
+.pane-right { flex: 1 1 0; border-left: 1px solid var(--border); }
+
+.divider {
+  width: 6px; background: var(--surface2);
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  cursor: col-resize; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; user-select: none; transition: background .15s;
+}
+.divider:hover, .divider.dragging { background: #dde3ec; }
+.divider-dots { display: flex; flex-direction: column; gap: 3px; }
+.divider-dot  { width: 3px; height: 3px; border-radius: 50%; background: var(--border2); }
+
+/* ── Split slider control ── */
+.split-controls {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--muted);
+}
+.split-label-text { font-size: 11px; white-space: nowrap; }
+.width-tip { font-size: 10px; color: var(--hint); font-family: var(--mono); min-width: 38px; text-align: center; }
+
+/* ── Misc helpers ── */
+.mono  { font-family: var(--mono); font-size: 11px; }
+.muted { color: var(--muted); }
+.small { font-size: 11px; }
+.pill  { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; border: 1px solid transparent; }
+.pill-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.p-syn  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.p-bf   { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.p-other{ background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.hostname { color: #16a34a; font-family: var(--mono); font-size: 11px; }
+.pause-btn { font-size: 10px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border2); background: var(--surface); color: var(--muted); cursor: pointer; }
+.pause-btn.paused { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
+.btn-xs.danger-active { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+.btn-xs.warn-active   { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <p>Network Monitoring Tool Dashboard</p>
+  <div class="header-right" style="margin-left:auto;">
+    <div class="live-badge"><div class="live-dot"></div> Live</div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card green">
+      <div class="stat-pill">LIVE</div>
+      <div class="stat-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+      <div class="stat-label">Total Packets Logged</div>
+      <div class="stat-value" id="stat-total">{{ total_logs_count }}</div>
+      <div class="stat-sub">Since session start</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-pill">ALERT</div>
+      <div class="stat-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="stat-label">Security Incidents</div>
+      <div class="stat-value" id="stat-alerts">{{ total_alerts_count }}</div>
+      <div class="stat-sub">Anomalies detected</div>
+    </div>
+  </div>
+
+  <!-- PANEL WIDTH SLIDER -->
+  <div class="split-controls">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/>
+    </svg>
+    <span class="split-label-text">Panel width</span>
+    <input type="range" id="split-slider" min="20" max="80" value="38" step="1" oninput="onSlider(this.value)"/>
+    <span class="width-tip" id="split-label">38 / 62</span>
+  </div>
+
+  <!-- SIDE BY SIDE PANELS -->
+  <div class="split-wrapper" id="split-wrapper">
+
+    <!-- LEFT: Security Alerts -->
+    <div class="split-pane pane-left" id="pane-left">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot" style="background:#dc2626;"></span>
+          Security Alerts
+          <span class="live-tag">Real-time</span>
+        </div>
+        <div class="panel-actions">
+          <button class="btn-xs active" onclick="filterAlerts('', this)">All</button>
+          <button class="btn-xs" onclick="filterAlerts('SYNFlood', this)">SYN</button>
+          <button class="btn-xs" onclick="filterAlerts('BruteForce', this)">BF</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Source IP</th>
+              <th>Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-tbody">
+            {% if alerts %}
+              {% for alert in alerts %}
+              <tr class="alert-row" data-id="{{ alert.id }}"
+                  data-type="{{ alert.anomaly_type }}">
+                <td class="mono muted">{{ alert.timestamp.strftime('%H:%M:%S') }}</td>
+                <td><span class="ip">{{ alert.src_ip }}</span></td>
+                <td>
+                  {% if alert.anomaly_type == 'SYNFlood' %}
+                    <span class="pill p-syn"><span class="pill-dot"></span>SYNFlood</span>
+                  {% elif alert.anomaly_type == 'BruteForce' %}
+                    <span class="pill p-bf"><span class="pill-dot"></span>BruteForce</span>
+                  {% else %}
+                    <span class="pill p-other">{{ alert.anomaly_type }}</span>
+                  {% endif %}
+                </td>
+                <td class="muted small">{{ alert.description }}</td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr class="empty-row">
+                <td colspan="4">
+                  <div class="empty-state">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    No alerts detected
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DRAG DIVIDER -->
+    <div class="divider" id="divider" onmousedown="startDrag(event)">
+      <div class="divider-dots">
+        <div class="divider-dot"></div>
+        <div class="divider-dot"></div>
+        <div class="divider-dot"></div>
+        <div class="divider-dot"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Live Log Stream -->
+    <div class="split-pane pane-right" id="pane-right">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot" style="background:#16a34a;"></span>
+          Live Log Stream
+        </div>
+        <div class="panel-actions">
+          <input class="filter-input" id="ip-filter" placeholder="Filter IP…" oninput="filterLogs()"/>
+          <select class="select-sm" id="proto-filter" onchange="filterLogs()">
+            <option value="">All</option>
+            <option value="TCP">TCP</option>
+            <option value="UDP">UDP</option>
+            <option value="ICMP">ICMP</option>
+            <option value="HTTP">HTTP</option>
+          </select>
+          <button class="pause-btn" id="pause-btn" onclick="togglePause()">Pause</button>
+          <span class="count-tag" id="log-count">0 entries</span>
+        </div>
+      </div>
+      <div class="table-scroll" id="stream-body">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Source</th>
+              <th>Destination</th>
+              <th>Hostname</th>
+              <th>Proto</th>
+              <th>Ports (S→D)</th>
+              <th>Size</th>
+            </tr>
+          </thead>
+          <tbody id="log-stream-tbody">
+            {% if logs %}
+              {% for log in logs %}
+              <tr data-id="{{ log.id }}">
+                <td class="mono muted">{{ log.timestamp.strftime('%H:%M:%S') }}</td>
+                <td><span class="ip">{{ log.src_ip }}</span></td>
+                <td><span class="ip ip-dst">{{ log.dst_ip }}</span></td>
+                <td><span class="hostname">{{ log.hostname }}</span></td>
+                <td>
+                  <span class="badge
+                    {% if log.protocol == 'TCP' %}b-tcp
+                    {% elif log.protocol == 'UDP' %}b-udp
+                    {% elif log.protocol == 'ICMP' %}b-icmp
+                    {% elif log.protocol == 'HTTP' %}b-http
+                    {% else %}b-def{% endif %}">
+                    {{ log.protocol }}
+                  </span>
+                </td>
+                <td class="mono muted">{{ log.src_port }}→{{ log.dst_port }}</td>
+                <td class="mono muted">{{ log.packet_size }} B</td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr class="empty-row">
+                <td colspan="7">
+                  <div class="empty-state">Waiting for traffic…</div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+<script>
+    // ── Split panel: slider ──
+function onSlider(val) {
+  val = parseInt(val);
+  document.getElementById('pane-left').style.flex = '0 0 ' + val + '%';
+  document.getElementById('split-label').textContent = val + ' / ' + (100 - val);
+}
+
+// ── Split panel: drag divider ──
+let dragging = false, startX = 0, startLeftW = 0;
+
+function startDrag(e) {
+  dragging = true;
+  startX = e.clientX;
+  startLeftW = document.getElementById('pane-left').getBoundingClientRect().width;
+  document.getElementById('divider').classList.add('dragging');
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', stopDrag);
+  e.preventDefault();
+}
+
+function onDrag(e) {
+  if (!dragging) return;
+  const totalW = document.getElementById('split-wrapper').getBoundingClientRect().width;
+  const newW   = Math.max(totalW * .18, Math.min(totalW * .82, startLeftW + e.clientX - startX));
+  const pct    = Math.round((newW / totalW) * 100);
+  document.getElementById('pane-left').style.flex = '0 0 ' + pct + '%';
+  document.getElementById('split-slider').value   = pct;
+  document.getElementById('split-label').textContent = pct + ' / ' + (100 - pct);
+}
+
+function stopDrag() {
+  dragging = false;
+  document.getElementById('divider').classList.remove('dragging');
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+}
+
+// ── Alert filter ──
+function filterAlerts(type, btn) {
+  document.querySelectorAll('#alerts-tbody tr').forEach(r => {
+    r.style.display = (!type || r.dataset.type === type) ? '' : 'none';
+  });
+  document.querySelectorAll('.pane-left .btn-xs').forEach(b =>
+    b.classList.remove('active', 'danger-active', 'warn-active'));
+  if (btn) {
+    if (type === 'SYN Flood')    btn.classList.add('danger-active');
+    else if (type === 'Brute Force') btn.classList.add('warn-active');
+    else btn.classList.add('active');
+  }
+}
+
+// ── Log filter ──
+function filterLogs() {
+  const ip    = document.getElementById('ip-filter').value.toLowerCase();
+  const proto = document.getElementById('proto-filter').value;
+  let vis = 0;
+  document.querySelectorAll('#log-stream-tbody tr').forEach(r => {
+    const b     = r.querySelector('.badge');
+    const show  = (!ip || r.textContent.toLowerCase().includes(ip))
+               && (!proto || (b && b.textContent.trim() === proto));
+    r.style.display = show ? '' : 'none';
+    if (show) vis++;
+  });
+  document.getElementById('log-count').textContent = vis + ' entries';
+}
+
+// ── Pause toggle ──
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pause-btn');
+  btn.textContent = paused ? 'Resume' : 'Pause';
+  btn.classList.toggle('paused', paused);
+}
+</script>
+</body>
+</html>
+

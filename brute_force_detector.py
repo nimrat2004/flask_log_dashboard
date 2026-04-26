@@ -1,43 +1,34 @@
-import time
+# detect_anomaly.py
+from datetime import datetime, timedelta
 
-brute_force_tracker = {}
-BF_THRESHOLD = 10        # failed attempts before alert
-TIME_WINDOW = 60         # within 60 seconds
+login_history = {}
 
-def detect_brute_force(src_ip):
-    current_time = time.time()
+BRUTE_FORCE_THRESHOLD = 5  # attempts
+TIME_WINDOW = 30           # seconds
 
-    if src_ip not in brute_force_tracker:
+def detect_brute_force(src_ip, payload):
+    # Convert payload to lowercase to avoid case-sensitivity issues
+    payload_str = str(payload).lower()
+    
+    # Broad check: If it's a POST request and mentions our login route
+    if "post" in payload_str and "/login" in payload_str:
+        now = datetime.now()
         
-        brute_force_tracker[src_ip] = {
-            "count": 1,
-            "first_seen": current_time
-        }
+        if src_ip not in login_history:
+            login_history[src_ip] = []
+        
+        login_history[src_ip].append(now)
+        
+        # Keep only last 30 seconds
+        thirty_seconds_ago = now - timedelta(seconds=30)
+        login_history[src_ip] = [t for t in login_history[src_ip] if t > thirty_seconds_ago]
+        
+        # DEBUG PRINT: This will tell us if the logic is even being triggered
+        print(f"[DEBUG] Login attempt tracked for {src_ip}. Count: {len(login_history[src_ip])}")
 
-        return False, None
-
-    elapsed = current_time - brute_force_tracker[src_ip]["first_seen"]
-
-    if elapsed <= TIME_WINDOW:
-        brute_force_tracker[src_ip]["count"] += 1
-
-        print(f"[BF DEBUG] {src_ip} → attempts: {brute_force_tracker[src_ip]['count']}")
-
-        if brute_force_tracker[src_ip]["count"] >= BF_THRESHOLD:
-            data = dict(brute_force_tracker[src_ip])
-
-            # reset after detection
-            brute_force_tracker[src_ip] = {
-                "count": 1,
-                "first_seen": current_time
-            }
-
-            return True, data
-    else:
-        # time window expired, reset
-        brute_force_tracker[src_ip] = {
-            "count": 1,
-            "first_seen": current_time
-        }
-
-    return False, None
+        if len(login_history[src_ip]) >= 5:
+            desc = f"Brute Force Detected: {len(login_history[src_ip])} attempts in 30s"
+            login_history[src_ip] = [] # Reset
+            return True, desc
+            
+    return False, ""

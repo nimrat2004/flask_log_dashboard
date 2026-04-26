@@ -124,3 +124,11 @@ def get_my_ip():
 
 # Use it like this:
 my_current_ip = get_my_ip()
+
+def cleanup_old_logs(PacketLog, db):
+    # Get the 50th newest log's ID
+    cutoff = PacketLog.query.order_by(PacketLog.id.desc()).offset(50).first()
+    
+    if cutoff:
+        PacketLog.query.filter(PacketLog.id < cutoff.id).delete()
+        db.session.commit()
