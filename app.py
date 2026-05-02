@@ -7,6 +7,11 @@ from flask_sqlalchemy import SQLAlchemy
 from capture_packet import start_sniffer
 from flask import jsonify, request
 from utils import get_hostname, my_current_ip, cleanup_old_logs
+from collections import Counter
+from ml.ml_live import load_models
+from ml.feature_extractor import extract_features
+import pandas as pd
+iso_model, kmeans, scaler = load_models()
 
 load_dotenv()
 DB_PASSWORD = quote_plus(os.getenv("DB_PASSWORD"))
@@ -91,9 +96,10 @@ def get_logs():
     data = []
     for log in new_logs:
         target_ip = log.src_ip if my_current_ip == log.dst_ip else log.dst_ip
+     
         data.append({
             "id": log.id,
-            "timestamp": log.timestamp.strftime("%H:%M:%S"),
+            "timestamp": log.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "src_ip": log.src_ip,
             "dst_ip": log.dst_ip,
             "hostname": get_hostname(target_ip),   # now cached — no hang
@@ -138,6 +144,63 @@ def get_incidents():
         "total_alerts": total_alerts_count   
     })
 
+
+@app.route("/api/dashboard")
+def dashboard_data():
+    logs = PacketLog.query.order_by(PacketLog.timestamp.desc()).limit(100).all()
+
+    packet_sizes = []
+    timestamps = []
+    scatter_x = []
+    scatter_y = []
+    anomaly_flags = []
+    alerts = []
+
+    for log in logs:
+        packet_size = log.packet_size
+        dst_port = log.dst_port if log.dst_port else 0
+        protocol = log.protocol
+
+        # Feature extraction
+        features = extract_features(packet_size, dst_port, protocol)
+
+        feature_df = pd.DataFrame(
+            [features],
+            columns=["packet_size", "dst_port", "protocol"]
+        )
+
+        X_scaled = scaler.transform(feature_df)
+
+        iso_pred = iso_model.predict(X_scaled)[0]
+        cluster = kmeans.predict(X_scaled)[0]
+
+        # Line chart data
+        packet_sizes.append(packet_size)
+        timestamps.append(str(log.timestamp))
+
+        # Scatter data
+        scatter_x.append(packet_size)
+        scatter_y.append(dst_port)
+        anomaly_flags.append(iso_pred)
+
+        # Alerts
+        if iso_pred == -1:
+            alerts.append({
+                "type": "ML Anomaly",
+                "ip": log.src_ip,
+                "desc": f"Packet size {packet_size}, port {dst_port}"
+            })
+
+    return jsonify({
+    "timestamps": timestamps[::-1],
+    "packet_sizes": [int(x) for x in packet_sizes[::-1]],
+    "scatter_x": [int(x) for x in scatter_x],
+    "scatter_y": [int(y) for y in scatter_y],
+    "anomaly": [int(a) for a in anomaly_flags],
+    "alerts": alerts[-5:]
+    })
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -146,7 +209,7 @@ def login():
         password = request.form.get('password')
         
         # This is where the "failure" happens
-        if username == "admin" and password == "secret123":
+        if username == "admin" and password == "123":
             return "Login Successful"
         else:
             return "Invalid Credentials", 401 # 401 is key for detection
@@ -156,5 +219,5 @@ def login():
 if __name__ == '__main__':
     print("Starting SecureWatch dashboard at http://127.0.0.1:5000")
     # ── Start background thread ───────────────────────────────────────────────
-    #thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog, Incident), daemon=True).start()
+    thread = threading.Thread(target=start_sniffer,args=(app, db, PacketLog, Incident), daemon=True).start()
     app.run(host='0.0.0.0', port=5000, debug=True)

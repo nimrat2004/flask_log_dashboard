@@ -31,7 +31,10 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log(`Initialized: LogID=${lastLogId}, AlertID=${lastAlertId}`);
 
     updateDashboard();
+    loadDashboard();
+    setInterval(loadDashboard, 5000);
 });
+
 
 
 // ── DOM row limit — keeps browser fast ──
@@ -48,6 +51,21 @@ function trimRows(tbodyId, maxRows) {
             rows[i].remove();
         }
     }
+}
+
+async function loadDashboard() {
+    try {
+    const res = await fetch("/api/dashboard");
+    if (!res.ok) throw new Error("API error");
+
+    const data = await res.json();
+
+    updateLineChart(data);
+    updateScatterChart(data);
+
+} catch (err) {
+    console.error("Dashboard Load Error:", err);
+}
 }
 
 
@@ -71,9 +89,10 @@ async function updateDashboard() {
 
             // Update lastLogId to highest received
             lastLogId = Math.max(...logData.logs.map(l => l.id), lastLogId);
-
+            
             let logHtml = "";
             logData.logs.reverse().forEach(log => {
+                console.log(log.timestamp)
                 logHtml += `
                 <tr class="new-row" data-id="${log.id}">
                     <td>${log.timestamp}</td>
@@ -143,5 +162,58 @@ async function updateDashboard() {
     } finally {
         isUpdating = false;
         setTimeout(updateDashboard, 4000);   // next cycle
+     
     }
 }
+
+let lineChart;
+
+function updateLineChart(data) {
+    const ctx = document.getElementById("lineChart").getContext("2d");
+
+    if (lineChart) lineChart.destroy();
+
+    lineChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: data.timestamps,
+            datasets: [{
+                label: "Packet Size",
+                data: data.packet_sizes,
+                borderWidth: 2
+            }]
+        }
+    });
+}
+
+let scatterChart;
+
+function updateScatterChart(data) {
+    const ctx = document.getElementById("scatterChart").getContext("2d");
+
+    if (scatterChart) scatterChart.destroy();
+
+    const points = data.scatter_x.map((x, i) => ({
+        x: x,
+        y: data.scatter_y[i],
+        backgroundColor: data.anomaly[i] === -1 ? "red" : "blue"
+    }));
+
+    scatterChart = new Chart(ctx, {
+        type: "scatter",
+        data: {
+            datasets: [{
+                label: "Traffic Behavior",
+                data: points,
+                pointRadius: 5
+            }]
+        },
+        options: {
+            scales: {
+                x: { title: { display: true, text: "Packet Size" }},
+                y: { title: { display: true, text: "Destination Port" }}
+            }
+        }
+    });
+}
+

@@ -13,7 +13,7 @@ def log_packet(PacketLog, db, src_ip, dst_ip, protocol, src_port, dst_port, pack
         dst_port=dst_port,
         packet_size=packet_size
         )
-                    
+   
     db.session.add(log)
     db.session.commit()
  

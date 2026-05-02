@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 
 login_history = {}
 
-BRUTE_FORCE_THRESHOLD = 5  # attempts
+BRUTE_FORCE_THRESHOLD = 2  # attempts
 TIME_WINDOW = 30           # seconds
 
 def detect_brute_force(src_ip, payload):
+    
     # Convert payload to lowercase to avoid case-sensitivity issues
     payload_str = str(payload).lower()
     

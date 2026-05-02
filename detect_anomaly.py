@@ -128,7 +128,7 @@ def detect_dns_tunnel(src_ip, query_name):
         
         # If > 70% of recent queries are unique and long
         if unique_queries > (QUERY_THRESHOLD * 0.7):
-            desc = f"Suspicious DNS Activity: {unique_queries} unique queries detected from {src_ip}"
+            desc = f"Suspicious DNS Activity: {unique_queries} unique queries detected."
             dns_stats[src_ip] = [] # Reset
             return True, desc
 

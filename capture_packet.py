@@ -8,8 +8,13 @@ from scapy.layers.dns import DNS
 from scapy.layers.inet import IP, UDP, ICMP, TCP
 from brute_force_detector import detect_brute_force
 from save_packet import log_packet, save_incident
+from ml.feature_extractor import extract_features
+from ml.ml_live import load_models
+import pandas as pd
+
 
 def start_sniffer(app, db, PacketLog, Incident):
+    iso_model, kmeans, scaler = load_models()
     def process_packet(packet):
         with app.app_context():   
 
@@ -21,16 +26,13 @@ def start_sniffer(app, db, PacketLog, Incident):
                 dst_port = None
                 
                 process_dns_packet(packet)
-                
+               
                 if packet.haslayer(TCP):
-                    payload = ""
-                    if packet[TCP].dport == 5000:
-                    
+                 
+                    if packet[TCP].dport == 5000 or packet[TCP].sport == 5000:
                         payload_bytes = bytes(packet[TCP].payload)
-                            
-                        if payload_bytes:
-                            payload = payload_bytes.decode('utf-8', errors='ignore')
-                        
+                        payload = payload_bytes.decode('utf-8', errors='ignore') if payload_bytes else ""
+                        print("ready to call Brute force detect")
                         is_attack, desc = detect_brute_force(packet[IP].src, payload)
                        
                         if is_attack:
@@ -94,8 +96,33 @@ def start_sniffer(app, db, PacketLog, Incident):
                         print(f"Port Scan Detected from {src_ip}")
                         save_incident(Incident, db, src_ip, dst_ip, "Port Scan", f"Ports scanned: {list(data['ports'])}")
 
+                #Behavior Based Analysis
+                #AFTER extracting packet info
+                packet_size = len(packet)
+
+                # ML Feature Extraction
+                features = extract_features(packet_size, dst_port, packet.lastlayer().name)
+
+                # Scale
+
+                feature_df = pd.DataFrame(
+                    [features],
+                    columns=["packet_size", "dst_port", "protocol"]
+                )
+
+                X_scaled = scaler.transform(feature_df)
+
+                # Predict
+                iso_pred = iso_model.predict(X_scaled)[0]
+                cluster = kmeans.predict(X_scaled)[0]
+
+                # Detect anomaly
+                if iso_pred == -1:
+                    print("ML Anomaly Detected")
+                    save_incident(Incident, db, src_ip, dst_ip, "ML Anomaly", f"Cluster: {cluster}, Features: {features}")
+
                 if protocol == "ICMP" or (protocol in ["TCP", "UDP"] and (dst_port in [80, 443, 53, 50000] or src_port in [80, 443, 53, 5000])):
-                    packet_size = len(packet)
+           
                     log_packet(PacketLog, db, src_ip, dst_ip, protocol, src_port, dst_port, packet_size)
 
                     # Print for debugging
@@ -103,6 +130,9 @@ def start_sniffer(app, db, PacketLog, Incident):
 
     print("Sniffer started...")
     sniff(iface="Wi-Fi", prn=process_packet, filter= "", store=0)
+    #sniff(iface="Software Loopback Interface 1", prn=process_packet, filter= "", store=0)
+
+    
     
 
 
