@@ -155,6 +155,7 @@ def dashboard_data():
     scatter_y = []
     anomaly_flags = []
     alerts = []
+    cluster_list = []
 
     for log in logs:
         packet_size = log.packet_size
@@ -173,7 +174,7 @@ def dashboard_data():
 
         iso_pred = iso_model.predict(X_scaled)[0]
         cluster = kmeans.predict(X_scaled)[0]
-
+        cluster_list.append(int(cluster))
         # Line chart data
         packet_sizes.append(packet_size)
         timestamps.append(str(log.timestamp))
@@ -190,6 +191,7 @@ def dashboard_data():
                 "ip": log.src_ip,
                 "desc": f"Packet size {packet_size}, port {dst_port}"
             })
+    
 
     return jsonify({
     "timestamps": timestamps[::-1],
@@ -197,7 +199,8 @@ def dashboard_data():
     "scatter_x": [int(x) for x in scatter_x],
     "scatter_y": [int(y) for y in scatter_y],
     "anomaly": [int(a) for a in anomaly_flags],
-    "alerts": alerts[-5:]
+    "alerts": alerts[-5:],
+    "cluster": cluster_list
     })
 
 

@@ -134,11 +134,54 @@
     </div>
   </div>
 
-<h2>📈 Packet Activity</h2>
-<canvas id="lineChart"></canvas>
+  <br>
+   
+  
+ <div class="panel panel-full p-5">
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="dot" style="background:var(--danger)"></span>
+                Packet Activity
+                <span style="font-size:.68rem;color:var(--muted);font-weight:400;margin-left:4px;">(Real-time)</span>
+            </div>
+        </div>
+    </div>
+    <br>
+    <div id="sw" style="overflow-x:auto; overflow-y:hidden; width:100%;">
+        <div id="cw" style="position:relative;">
+            <canvas id="lineChart" style="display:block;"></canvas>
+        </div>
+    </div>
+</div>
+<!-- <h2>Packet Activity</h2>
+<canvas id="lineChart"></canvas> -->
 
-<h2>🔴 ML Behavior Scatter</h2>
-<canvas id="scatterChart"></canvas>
+ <br>
+   <div class="panel panel-full p-5">
+    <!-- Security Alerts -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot" style="background:var(--danger)"></span>
+         ML Behavior Scatter
+          <span style="font-size:.68rem;color:var(--muted);font-weight:400;margin-left:4px;">(Real-time)</span>
+        </div>
+      </div>
+      </div>
+      <br><br>
+        
+    <div id="scatterLegend" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;"></div>
+<div style="position:relative;height:300px;">
+    <canvas id="scatterChart"></canvas>
+</div>
+    <div>
+        
+    <span style="color:blue;">● Cluster 0 (Normal)</span>
+    <span style="color:green;">● Cluster 1 (Behavior)</span>
+    <span style="color:red;">● Anomaly</span>
+</div>
+  </div>
 
 </main>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
